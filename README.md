@@ -88,8 +88,9 @@ create the release:
 - **Manual:** Actions → **publish** → *Run workflow*, with inputs
   `chrono_ref` / `version_label` / `recipe_rev`. Use this for recipe-revision bumps
   (`r2`, `r3`, …) and for refs that aren't plain upstream release tags.
-- **Automatic:** the **check-upstream** workflow runs weekly (Mondays 06:17 UTC, also
-  manually dispatchable). It compares upstream's release tags (from `9.0.1` up) against
+- **Automatic:** the **check-upstream** workflow runs weekly (Mondays 06:17 UTC), on
+  every push to `main`, and on manual dispatch. It compares upstream's release tags
+  (from `9.0.1` up) against
   the `chrono-*-ubuntu24.04-*` tags already published here and builds every missing
   version in the supported series at `r1`. A missing version *outside* the supported
   series (e.g. a new major like 10.x, which renamed the CMake module flags) produces a
