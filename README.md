@@ -80,9 +80,22 @@ a changed recipe is published as a new `<rev>`.
 
 ## Publishing (maintainers)
 
-Publishing is a deliberate manual act: Actions → **publish** → *Run workflow*, with inputs
-`chrono_ref` / `version_label` / `recipe_rev`. The workflow builds via
-[`scripts/build.sh`](scripts/build.sh), proves the tarball is usable by compiling, linking,
+Two paths, both ending in the same pipeline — build via
+[`scripts/build.sh`](scripts/build.sh), prove the tarball is usable by compiling, linking,
 and running a minimal consumer project against the extracted artifact, and only then
-creates the release. `scripts/build.sh` is runnable locally on Ubuntu 24.04 the same way
+create the release:
+
+- **Manual:** Actions → **publish** → *Run workflow*, with inputs
+  `chrono_ref` / `version_label` / `recipe_rev`. Use this for recipe-revision bumps
+  (`r2`, `r3`, …) and for refs that aren't plain upstream release tags.
+- **Automatic:** the **check-upstream** workflow runs weekly (Mondays 06:17 UTC, also
+  manually dispatchable). It compares upstream's release tags (from `9.0.1` up) against
+  the `chrono-*-ubuntu24.04-*` tags already published here and builds every missing
+  version in the supported series at `r1`. A missing version *outside* the supported
+  series (e.g. a new major like 10.x, which renamed the CMake module flags) produces a
+  workflow warning instead of a doomed build — update `scripts/build.sh` for it, then
+  widen `SUPPORTED` in
+  [`.github/workflows/check-upstream.yml`](.github/workflows/check-upstream.yml).
+
+`scripts/build.sh` is runnable locally on Ubuntu 24.04 the same way
 (`build`, then `consume-test`, then `notes`).
