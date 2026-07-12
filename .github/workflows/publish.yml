@@ -19,6 +19,12 @@ on:
 permissions:
   contents: write
 
+# One publish per tag at a time: the immutability guard runs ~30-40 minutes
+# before the release step, so overlapping dispatches must be serialized.
+concurrency:
+  group: publish-${{ inputs.version_label }}-${{ inputs.recipe_rev }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
@@ -35,14 +41,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          # Fail closed: only a confirmed 404 means the release is absent.
+          if response=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" 2>&1); then
             echo "::error::Release $TAG already exists. Releases are immutable - bump recipe_rev instead."
             exit 1
-          fi
-          if git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG already exists. Releases are immutable - bump recipe_rev instead."
+          elif ! grep -q "HTTP 404" <<< "$response"; then
+            echo "::error::Could not verify that release $TAG is absent: $response"
             exit 1
           fi
+          set +e
+          git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::Tag $TAG already exists. Releases are immutable - bump recipe_rev instead."
+            exit 1
+          elif [ "$rc" -ne 2 ]; then
+            echo "::error::Could not check for existing tag $TAG (git ls-remote exit $rc)."
+            exit 1
+          fi
+          echo "OK: no existing release or tag named $TAG"
 
       - name: Build + package
         run: bash scripts/build.sh build

@@ -85,9 +85,19 @@ cmd_build() {
 
   log "Fetching ${UPSTREAM_URL} @ ${CHRONO_REF}"
   rm -rf chrono build stage
+  rm -f "${TARBALL}"
   git clone --depth 1 --branch "${CHRONO_REF}" "${UPSTREAM_URL}" chrono
   local upstream_sha
   upstream_sha=$(git -C chrono rev-parse HEAD)
+
+  # The tag asserts VERSION_LABEL; if upstream has a tag by that name it must
+  # point at exactly what we are building, or the label would be a lie.
+  local tag_sha
+  tag_sha=$(git ls-remote "${UPSTREAM_URL}" "refs/tags/${VERSION_LABEL}" "refs/tags/${VERSION_LABEL}^{}" | tail -n1 | cut -f1)
+  if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${upstream_sha}" ]; then
+    die "upstream tag ${VERSION_LABEL} points at ${tag_sha}, but ${CHRONO_REF} is at ${upstream_sha}; build the tag itself or fix VERSION_LABEL"
+  fi
+  [ -n "${tag_sha}" ] || log "note: upstream has no tag '${VERSION_LABEL}'; trusting the operator-provided version label"
 
   log "Configuring"
   cmake -S chrono -B build "${CONFIGURE_FLAGS[@]}"
@@ -143,8 +153,11 @@ cmd_build() {
   log "Writing BUILD_MANIFEST.txt"
   local libstdcxx build_glibcxx artifact_glibcxx
   libstdcxx=$(g++ -print-file-name=libstdc++.so.6)
-  build_glibcxx=$(strings -a "${libstdcxx}" | grep -oE 'GLIBCXX_[0-9]+(\.[0-9]+)*' | sort -uV | tail -n1)
-  artifact_glibcxx=$(objdump -T "${libdir}"/libChrono*.so* | grep -oE 'GLIBCXX_[0-9]+(\.[0-9]+)*' | sort -uV | tail -n1)
+  [ -e "${libstdcxx}" ] || die "could not locate the build libstdc++ (g++ returned '${libstdcxx}')"
+  build_glibcxx=$(strings -a "${libstdcxx}" | grep -oE 'GLIBCXX_[0-9]+(\.[0-9]+)*' | sort -uV | tail -n1) ||
+    die "failed to read GLIBCXX symbol versions from ${libstdcxx}"
+  artifact_glibcxx=$(objdump -T "${libdir}"/libChrono*.so* | grep -oE 'GLIBCXX_[0-9]+(\.[0-9]+)*' | sort -uV | tail -n1) ||
+    die "failed to read GLIBCXX requirements from the built libraries"
   cat > "${STAGED_PREFIX}/BUILD_MANIFEST.txt" <<EOF
 tag=${TAG}
 version_label=${VERSION_LABEL}
@@ -156,6 +169,7 @@ gcc_version=$(gcc -dumpfullversion)
 build_libstdcxx_max_glibcxx=${build_glibcxx}
 artifact_required_max_glibcxx=${artifact_glibcxx}
 enabled_modules=VEHICLE,IRRLICHT
+simd_baseline=generic x86-64 (USE_SIMD=OFF, no -march flags)
 configure_flags=${CONFIGURE_FLAGS[*]}
 recipe_rev=${RECIPE_REV}
 build_date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
