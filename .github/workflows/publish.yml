@@ -1,0 +1,59 @@
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      chrono_ref:
+        description: "Upstream Project Chrono git ref to build"
+        default: "release/9.0"
+        required: true
+      version_label:
+        description: "Upstream version label (goes into the tag)"
+        default: "9.0.1"
+        required: true
+      recipe_rev:
+        description: "Recipe revision (r1, r2, ...) - bump when rebuilding the same upstream version"
+        default: "r1"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      CHRONO_REF: ${{ inputs.chrono_ref }}
+      VERSION_LABEL: ${{ inputs.version_label }}
+      RECIPE_REV: ${{ inputs.recipe_rev }}
+      JOBS: "4"
+      TAG: chrono-${{ inputs.version_label }}-ubuntu24.04-${{ inputs.recipe_rev }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to overwrite an existing release (releases are immutable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists. Releases are immutable - bump recipe_rev instead."
+            exit 1
+          fi
+          if git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Releases are immutable - bump recipe_rev instead."
+            exit 1
+          fi
+
+      - name: Build + package
+        run: bash scripts/build.sh build
+
+      - name: Consume-test
+        run: bash scripts/build.sh consume-test
+
+      - name: Compose release notes
+        run: bash scripts/build.sh notes > notes.md
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$TAG" "$TAG.tar.zst" --title "$TAG" --notes-file notes.md
