@@ -56,4 +56,4 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$TAG" "$TAG.tar.zst" --title "$TAG" --notes-file notes.md
+        run: gh release create "$TAG" "$TAG.tar.zst" --title "$TAG" --notes-file notes.md --target "$GITHUB_SHA"

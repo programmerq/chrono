@@ -23,8 +23,14 @@ curl -fsSL -o chrono.tar.zst \
   https://github.com/programmerq/chrono/releases/download/chrono-9.0.1-ubuntu24.04-r1/chrono-9.0.1-ubuntu24.04-r1.tar.zst
 sudo tar -I zstd -xf chrono.tar.zst -C /opt
 export Chrono_DIR=/opt/chrono/lib/cmake/Chrono   # authoritative path: cmake_config_dir in BUILD_MANIFEST.txt
+export LD_LIBRARY_PATH=/opt/chrono/lib:${LD_LIBRARY_PATH:-}
 # then: find_package(Chrono CONFIG REQUIRED COMPONENTS Vehicle Irrlicht)
 ```
+
+The tarball **must be extracted to `/opt`** (yielding `/opt/chrono`): upstream's installed
+`chrono-config.cmake` is not relocatable — it bakes absolute include, library, and data
+paths derived from the configured install prefix, so the binaries are built for exactly
+that location.
 
 Each tarball contains an install tree:
 
@@ -51,6 +57,10 @@ C++ binaries are toolchain-bound. These are built on Ubuntu 24.04 with its stock
 consumers should check `BUILD_MANIFEST.txt` inside the tarball for the exact compiler and
 libstdc++ symbol versions. A consumer on an older or different base needs its own
 OS-labelled release, not this one.
+
+The libraries are built with `USE_SIMD=OFF`: upstream's default injects `-march=native`,
+which would tie the binaries to the build machine's CPU. These binaries run on any x86-64
+host (at a modest single-core performance cost versus a native-tuned source build).
 
 ## Tag scheme
 
