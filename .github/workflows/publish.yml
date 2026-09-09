@@ -8,7 +8,7 @@ on:
         default: "release/9.0"
         required: true
       version_label:
-        description: "Upstream version label (goes into the tag)"
+        description: "Version label for the release tag (x, x.y, x.y.z, or main)"
         default: "9.0.1"
         required: true
       recipe_rev:
@@ -22,7 +22,7 @@ on:
         type: string
         required: true
       version_label:
-        description: "Upstream version label (goes into the tag)"
+        description: "Version label for the release tag (x, x.y, x.y.z, or main)"
         type: string
         required: true
       recipe_rev:

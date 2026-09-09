@@ -68,7 +68,7 @@ host (at a modest single-core performance cost versus a native-tuned source buil
 chrono-<version>-ubuntu24.04-<rev>        e.g. chrono-9.0.1-ubuntu24.04-r1
 ```
 
-- `<version>` — upstream Chrono version label.
+- `<version>` — release label (`x`, `x.y`, `x.y.z`, or `main`).
 - `ubuntu24.04` — the OS the binaries were built on. Part of the name because C++ binaries
   are ABI-bound to the build OS/toolchain; a consumer on a different base gets its own
   OS-labelled build, never a silently reused one.
@@ -92,10 +92,11 @@ create the release:
   every push to `main`, and on manual dispatch. It compares upstream's release tags
   (from `9.0.1` up) against
   the `chrono-*-ubuntu24.04-*` tags already published here and builds every missing
-  version in the supported series at `r1`. A missing version *outside* the supported
-  series (e.g. a new major like 10.x, which renamed the CMake module flags) produces a
-  workflow warning instead of a doomed build — update `scripts/build.sh` for it, then
-  widen `SUPPORTED` in
+  version in the supported series at `r1` (including `9.x`, `10.x`, and `main`).
+  For each missing `x.y.z` upstream release, it also fills missing `x.y` and `x`
+  labels from the same upstream tag. A missing version *outside* the supported
+  series produces a workflow warning instead of a doomed build — update
+  `scripts/build.sh` for it, then widen `SUPPORTED` in
   [`.github/workflows/check-upstream.yml`](.github/workflows/check-upstream.yml).
 
 `scripts/build.sh` is runnable locally on Ubuntu 24.04 the same way

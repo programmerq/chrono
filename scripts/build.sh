@@ -38,15 +38,13 @@ STAGE_ROOT="${PWD}/stage"
 STAGED_PREFIX="${STAGE_ROOT}${FINAL_PREFIX}"
 UPSTREAM_URL="https://github.com/projectchrono/chrono.git"
 
-# Chrono 9.x flag names. Upstream 10.x renamed the module switches to
-# CH_ENABLE_MODULE_*; use the renamed flags when adding a 10.x build.
+# Chrono 9.x uses ENABLE_MODULE_* while 10.x/main uses CH_ENABLE_MODULE_*.
+# Pick the right prefix from upstream's source after cloning.
 # USE_SIMD=OFF is required for redistribution: upstream's default injects
 # -march=native into both the libraries and the exported consumer flags,
 # which would make the binaries CPU-specific to the build host.
-CONFIGURE_FLAGS=(
+CONFIGURE_FLAGS_COMMON=(
   -DCMAKE_BUILD_TYPE=Release
-  -DENABLE_MODULE_VEHICLE=ON
-  -DENABLE_MODULE_IRRLICHT=ON
   -DBUILD_DEMOS=OFF
   -DBUILD_TESTING=OFF
   -DBUILD_BENCHMARKING=OFF
@@ -99,8 +97,23 @@ cmd_build() {
   fi
   [ -n "${tag_sha}" ] || log "note: upstream has no tag '${VERSION_LABEL}'; trusting the operator-provided version label"
 
+  local module_prefix
+  if grep -q 'option(CH_ENABLE_MODULE_VEHICLE' chrono/CMakeLists.txt; then
+    module_prefix="CH_ENABLE_MODULE"
+  elif grep -q 'option(ENABLE_MODULE_VEHICLE' chrono/CMakeLists.txt; then
+    module_prefix="ENABLE_MODULE"
+  else
+    die "could not detect Chrono module flag prefix in chrono/CMakeLists.txt"
+  fi
+
+  local configure_flags=(
+    "${CONFIGURE_FLAGS_COMMON[@]}"
+    "-D${module_prefix}_VEHICLE=ON"
+    "-D${module_prefix}_IRRLICHT=ON"
+  )
+
   log "Configuring"
-  cmake -S chrono -B build "${CONFIGURE_FLAGS[@]}"
+  cmake -S chrono -B build "${configure_flags[@]}"
 
   log "Building (${JOBS} jobs)"
   cmake --build build -j"${JOBS}"
@@ -170,7 +183,7 @@ build_libstdcxx_max_glibcxx=${build_glibcxx}
 artifact_required_max_glibcxx=${artifact_glibcxx}
 enabled_modules=VEHICLE,IRRLICHT
 simd_baseline=generic x86-64 (USE_SIMD=OFF, no -march flags)
-configure_flags=${CONFIGURE_FLAGS[*]}
+configure_flags=${configure_flags[*]}
 recipe_rev=${RECIPE_REV}
 build_date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 install_prefix=${FINAL_PREFIX}

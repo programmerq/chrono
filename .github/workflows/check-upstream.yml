@@ -2,9 +2,9 @@ name: check-upstream
 
 # Compare upstream Project Chrono release tags against the artifacts already
 # published here, and build+publish anything missing that the current recipe
-# supports. Missing versions outside the supported series (e.g. a new major
-# that renamed the CMake module flags) produce a workflow warning and need a
-# recipe update in scripts/build.sh before SUPPORTED is widened.
+# supports. Missing versions outside the supported series produce a workflow
+# warning and need a recipe update in scripts/build.sh before SUPPORTED is
+# widened.
 #
 # Runs weekly, and also on every push to main so recipe updates take effect
 # immediately instead of waiting for the next tick. Tag pushes and releases
@@ -36,8 +36,9 @@ jobs:
       - name: Compare upstream releases against published artifacts
         id: diff
         run: |
-          FLOOR="9.0.1"     # oldest upstream version this pipeline publishes
-          SUPPORTED='^9\.'  # series the current recipe can build (10.x renamed the CMake flags)
+          FLOOR="9.0.1"          # oldest upstream version this pipeline publishes
+          SUPPORTED='^(9|10)\.'  # series the current recipe can build
+          MAIN_LABEL="main"
 
           upstream=$(git ls-remote --refs --tags https://github.com/projectchrono/chrono.git \
                      | sed -n 's#.*\trefs/tags/##p' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V)
@@ -46,19 +47,34 @@ jobs:
           echo "upstream releases:" $upstream
           echo "already published:" $covered
 
-          buildable=()
+          buildable='[]'
+          declare -A queued_labels=()
+
+          append_target() {
+            local ref="$1"
+            local label="$2"
+            grep -qxF "$label" <<< "$covered" && return 0
+            [ -n "${queued_labels[$label]+x}" ] && return 0
+            queued_labels["$label"]=1
+            buildable=$(jq -cn --argjson arr "$buildable" --arg ref "$ref" --arg label "$label" \
+              '$arr + [{"chrono_ref": $ref, "version_label": $label}]')
+          }
+
           while IFS= read -r v; do
             [ -n "$v" ] || continue
-            grep -qxF "$v" <<< "$covered" && continue
             [ "$(printf '%s\n%s\n' "$FLOOR" "$v" | sort -V | head -n1)" = "$FLOOR" ] || continue
             if [[ "$v" =~ $SUPPORTED ]]; then
-              buildable+=("$v")
+              append_target "$v" "$v"
+              append_target "$v" "${v%.*}"
+              append_target "$v" "${v%%.*}"
             else
               echo "::warning::upstream release $v has no published artifact but is outside the supported series ($SUPPORTED); update scripts/build.sh for it, then widen SUPPORTED here"
             fi
           done <<< "$upstream"
 
-          matrix=$(printf '%s\n' "${buildable[@]}" | grep . | jq -Rcn '[inputs]') || matrix='[]'
+          append_target "main" "$MAIN_LABEL"
+
+          matrix="$buildable"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "will build: $matrix"
 
@@ -69,11 +85,11 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        version: ${{ fromJSON(needs.discover.outputs.matrix) }}
+        target: ${{ fromJSON(needs.discover.outputs.matrix) }}
     permissions:
       contents: write
     uses: ./.github/workflows/publish.yml
     with:
-      chrono_ref: ${{ matrix.version }}
-      version_label: ${{ matrix.version }}
+      chrono_ref: ${{ matrix.target.chrono_ref }}
+      version_label: ${{ matrix.target.version_label }}
       recipe_rev: r1
